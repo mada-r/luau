@@ -22,6 +22,12 @@
 #include "Luau/TypeUtils.h"
 #include "Luau/VisitType.h"
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <iostream>
+#endif
+
 #include <algorithm>
 #include <iterator>
 
@@ -1569,7 +1575,7 @@ ControlFlow TypeChecker::check(const ScopePtr& scope, const AstStatTypeAlias& ty
         LUAU_ASSERT(generic);
         aliasScope->privateTypeBindings[generic->name] = TypeFun{{}, param.ty};
     }
-
+    
     for (auto param : binding->typePackParams)
     {
         auto generic = get<GenericTypePack>(param.tp);
@@ -4652,19 +4658,24 @@ WithPredicate<TypePackId> TypeChecker::checkExprList(const ScopePtr& scope, cons
 
 std::optional<AstExpr*> TypeChecker::matchRequire(const AstExprCall& call)
 {
-    const char* require = "require";
-
-    if (call.args.size != 1)
-        return std::nullopt;
-
-    const AstExprGlobal* funcAsGlobal = call.func->as<AstExprGlobal>();
-    if (!funcAsGlobal || funcAsGlobal->name != require)
+   if (call.args.size != 1)
         return std::nullopt;
 
     if (call.args.size != 1)
         return std::nullopt;
+        
+    const char* require[2] = {"require", "shared"};
 
-    return call.args.data[0];
+    for (const char* requireChar : require)
+    {
+        const AstExprGlobal* funcAsGlobal = call.func->as<AstExprGlobal>();
+        if (!funcAsGlobal || funcAsGlobal->name != requireChar)
+            continue;
+
+        return call.args.data[0];
+    }
+
+    return std::nullopt;
 }
 
 TypeId TypeChecker::checkRequire(const ScopePtr& scope, const ModuleInfo& moduleInfo, const Location& location)
@@ -4696,8 +4707,12 @@ TypeId TypeChecker::checkRequire(const ScopePtr& scope, const ModuleInfo& module
         // There are two reasons why we might fail to find the module:
         // either the file does not exist or there's a cycle. If there's a cycle
         // we will already have reported the error.
-        if (!resolver->moduleExists(moduleInfo.name) && !moduleInfo.optional)
+
+        bool exists = resolver->moduleExists(moduleInfo.name);
+
+        if (!exists && !moduleInfo.optional) {
             reportError(TypeError{location, UnknownRequire{resolver->getHumanReadableModuleName(moduleInfo.name)}});
+        }
 
         return errorRecoveryType(scope);
     }

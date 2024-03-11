@@ -4,6 +4,12 @@
 #include <string>
 #include <optional>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <iostream>
+#endif
+
 namespace Luau
 {
 
@@ -31,13 +37,15 @@ struct ModuleInfo
     bool optional = false;
 };
 
+struct SourceModule;
+
 struct FileResolver
 {
     virtual ~FileResolver() {}
 
     virtual std::optional<SourceCode> readSource(const ModuleName& name) = 0;
 
-    virtual std::optional<ModuleInfo> resolveModule(const ModuleInfo* context, AstExpr* expr)
+    virtual std::optional<ModuleInfo> resolveModule(const ModuleInfo* context, AstExpr* expr, Luau::SourceModule *sourceModule = nullptr)
     {
         return std::nullopt;
     }

@@ -106,6 +106,7 @@ struct FrontendOptions
 
     // When true, some internal complexity limits will be scaled down for modules that miss the limit set by moduleTimeLimitSec
     bool applyInternalLimitScaling = false;
+    bool applyInternalLimitScaling2 = false;
 };
 
 struct CheckResult
@@ -122,8 +123,11 @@ struct FrontendModuleResolver : ModuleResolver
     FrontendModuleResolver(Frontend* frontend);
 
     const ModulePtr getModule(const ModuleName& moduleName) const override;
+    const std::shared_ptr<SourceModule> getSourceModule(const ModuleName& moduleName) const override;
     bool moduleExists(const ModuleName& moduleName) const override;
     std::optional<ModuleInfo> resolveModuleInfo(const ModuleName& currentModuleName, const AstExpr& pathExpr) override;
+    
+    std::optional<std::string> getRoot();
     std::string getHumanReadableModuleName(const ModuleName& moduleName) const override;
 
     void setModule(const ModuleName& moduleName, ModulePtr module);
@@ -150,6 +154,11 @@ struct Frontend
         double timeParse = 0;
         double timeCheck = 0;
         double timeLint = 0;
+    };
+    
+    struct Source {
+        std::vector<std::string> workspaceFolders;
+        std::vector<std::string> sourceNodeNames;
     };
 
     Frontend(FileResolver* fileResolver, ConfigResolver* configResolver, const FrontendOptions& options = {});
@@ -242,6 +251,7 @@ public:
     std::unordered_map<ModuleName, RequireTraceResult> requireTrace;
 
     Stats stats = {};
+    Source source = {};
 
     std::vector<ModuleName> moduleQueue;
 };

@@ -184,7 +184,7 @@ struct FuzzFileResolver : Luau::FileResolver
         return Luau::SourceCode{it->second, Luau::SourceCode::Module};
     }
 
-    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* expr) override
+    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* expr, Luau::SourceModule*src = nullptr) override
     {
         if (Luau::AstExprGlobal* g = expr->as<Luau::AstExprGlobal>())
             return Luau::ModuleInfo{g->name.value};

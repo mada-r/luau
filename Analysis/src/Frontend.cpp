@@ -18,6 +18,7 @@
 #include "Luau/NonStrictTypeChecker.h"
 #include "Luau/TypeInfer.h"
 #include "Luau/Variant.h"
+#include "Luau/range.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -27,6 +28,11 @@
 #include <stdexcept>
 #include <string>
 
+#ifdef _WIN32
+#include <io.h>
+#include <iostream>
+#endif
+
 LUAU_FASTINT(LuauTypeInferIterationLimit)
 LUAU_FASTINT(LuauTypeInferRecursionLimit)
 LUAU_FASTINT(LuauTarjanChildLimit)
@@ -35,6 +41,8 @@ LUAU_FASTFLAGVARIABLE(LuauKnowsTheDataModel3, false)
 LUAU_FASTFLAG(DebugLuauDeferredConstraintResolution)
 LUAU_FASTFLAGVARIABLE(DebugLuauLogSolverToJson, false)
 LUAU_FASTFLAGVARIABLE(DebugLuauLogSolverToJsonFile, false)
+
+using namespace util::lang;
 
 namespace Luau
 {
@@ -166,13 +174,15 @@ LoadDefinitionFileResult Frontend::loadDefinitionFile(GlobalTypes& globals, Scop
     sourceModule.humanReadableName = packageName;
 
     Luau::ParseResult parseResult = parseSourceForModule(source, sourceModule, captureComments);
-    if (parseResult.errors.size() > 0)
+    if (parseResult.errors.size() > 0) {
         return LoadDefinitionFileResult{false, parseResult, sourceModule, nullptr};
+    }
 
     ModulePtr checkedModule = check(sourceModule, Mode::Definition, {}, std::nullopt, /*forAutocomplete*/ false, /*recordJsonLog*/ false, {});
 
-    if (checkedModule->errors.size() > 0)
+    if (checkedModule->errors.size() > 0) {
         return LoadDefinitionFileResult{false, parseResult, sourceModule, checkedModule};
+    }
 
     persistCheckedTypes(checkedModule, globals, targetScope, packageName);
 
@@ -802,12 +812,14 @@ bool Frontend::parseGraph(
                     // this relies on the fact that markDirty marks reverse-dependencies dirty as well
                     // thus if a node is not dirty, all its transitive deps aren't dirty, which means that they won't ever need
                     // to be built, *and* can't form a cycle with any nodes we did process.
-                    if (!it->second->hasDirtyModule(forAutocomplete))
+                    if (!it->second->hasDirtyModule(forAutocomplete)) {
                         continue;
+                    }
 
                     // This module might already be in the outside build queue
-                    if (canSkip && canSkip(dep))
+                    if (canSkip && canSkip(dep)) {
                         continue;
+                    }
 
                     // note: this check is technically redundant *except* that getSourceNode has somewhat broken memoization
                     // calling getSourceNode twice in succession will reparse the file, since getSourceNode leaves dirty flag set
@@ -1362,13 +1374,14 @@ std::pair<SourceNode*, SourceModule*> Frontend::getSourceNode(const ModuleName& 
     result.type = source->type;
 
     RequireTraceResult& require = requireTrace[name];
-    require = traceRequires(fileResolver, result.root, name);
 
     std::shared_ptr<SourceNode>& sourceNode = sourceNodes[name];
 
-    if (!sourceNode)
+    if (!sourceNode) {
         sourceNode = std::make_shared<SourceNode>();
-
+        // this->source.sourceNodeNames.emplace_back(name);
+    }
+    
     std::shared_ptr<SourceModule>& sourceModule = sourceModules[name];
 
     if (!sourceModule)
@@ -1376,6 +1389,8 @@ std::pair<SourceNode*, SourceModule*> Frontend::getSourceNode(const ModuleName& 
 
     *sourceModule = std::move(result);
     sourceModule->environmentName = environmentName;
+
+    require = traceRequires(fileResolver, &*sourceModule, result.root, name);
 
     sourceNode->name = sourceModule->name;
     sourceNode->humanReadableName = sourceModule->humanReadableName;
@@ -1389,8 +1404,10 @@ std::pair<SourceNode*, SourceModule*> Frontend::getSourceNode(const ModuleName& 
         sourceNode->dirtyModuleForAutocomplete = true;
     }
 
-    for (const auto& [moduleName, location] : require.requireList)
+
+    for (auto& [moduleName, location] : require.requireList) {
         sourceNode->requireSet.insert(moduleName);
+    }
 
     sourceNode->requireLocations = require.requireList;
 
@@ -1457,26 +1474,28 @@ FrontendModuleResolver::FrontendModuleResolver(Frontend* frontend)
 {
 }
 
-std::optional<ModuleInfo> FrontendModuleResolver::resolveModuleInfo(const ModuleName& currentModuleName, const AstExpr& pathExpr)
-{
-    // FIXME I think this can be pushed into the FileResolver.
-    auto it = frontend->requireTrace.find(currentModuleName);
-    if (it == frontend->requireTrace.end())
-    {
-        // CLI-43699
-        // If we can't find the current module name, that's because we bypassed the frontend's initializer
-        // and called typeChecker.check directly.
-        // In that case, requires will always fail.
+std::optional<std::string> FrontendModuleResolver::getRoot() {
+    if (frontend->source.workspaceFolders.size() < 1) {
         return std::nullopt;
     }
 
-    const auto& exprs = it->second.exprs;
+    return *frontend->source.workspaceFolders.begin();
+};
 
-    const ModuleInfo* info = exprs.find(&pathExpr);
-    if (!info)
-        return std::nullopt;
+std::optional<ModuleInfo> FrontendModuleResolver::resolveModuleInfo(const ModuleName& currentModuleName, const AstExpr& pathExpr)
+{
+    auto it = frontend->requireTrace.find(currentModuleName);
 
-    return *info;
+    if (it != frontend->requireTrace.end()) {
+        const auto& exprs = it->second.exprs;
+        const ModuleInfo* info = exprs.find(&pathExpr);
+        if (!info)
+            return std::nullopt;
+
+        return *info;
+    }
+
+    return std::nullopt;
 }
 
 const ModulePtr FrontendModuleResolver::getModule(const ModuleName& moduleName) const
@@ -1488,6 +1507,19 @@ const ModulePtr FrontendModuleResolver::getModule(const ModuleName& moduleName) 
         return it->second;
     else
         return nullptr;
+}
+
+// source modules are known even if they aren't open
+const std::shared_ptr<SourceModule> FrontendModuleResolver::getSourceModule(const ModuleName& moduleName) const
+{
+    std::scoped_lock lock(moduleMutex);
+
+    auto it = frontend->sourceModules.find(moduleName);
+    if (it != frontend->sourceModules.end())
+        return it->second;
+    else
+    
+    return nullptr;
 }
 
 bool FrontendModuleResolver::moduleExists(const ModuleName& moduleName) const

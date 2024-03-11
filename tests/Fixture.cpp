@@ -45,6 +45,12 @@ const ModulePtr TestFileResolver::getModule(const ModuleName& moduleName) const
     return nullptr;
 }
 
+const std::shared_ptr<SourceModule> TestFileResolver::getSourceModule(const ModuleName& moduleName) const
+{
+    LUAU_ASSERT(false);
+    return nullptr;
+}
+
 bool TestFileResolver::moduleExists(const ModuleName& moduleName) const
 {
     auto it = source.find(moduleName);
@@ -66,7 +72,7 @@ std::optional<SourceCode> TestFileResolver::readSource(const ModuleName& name)
     return SourceCode{it->second, sourceType};
 }
 
-std::optional<ModuleInfo> TestFileResolver::resolveModule(const ModuleInfo* context, AstExpr* expr)
+std::optional<ModuleInfo> TestFileResolver::resolveModule(const ModuleInfo* context, AstExpr* expr, Luau::SourceModule*src)
 {
     if (AstExprGlobal* g = expr->as<AstExprGlobal>())
     {

@@ -1068,7 +1068,7 @@ bool ConstraintSolver::tryDispatch(const FunctionCallConstraint& c, NotNull<cons
     }
 
     OverloadResolver resolver{
-        builtinTypes, NotNull{arena}, normalizer, constraint->scope, NotNull{&iceReporter}, NotNull{&limits}, constraint->location};
+        builtinTypes, NotNull{arena}, normalizer, constraint->scope, NotNull{&iceReporter}, NotNull{&limits}, c.callSite->location};
     auto [status, overload] = resolver.selectOverload(fn, argsPack);
     TypeId overloadToUse = fn;
     if (status == OverloadResolver::Analysis::Ok)
@@ -2184,15 +2184,14 @@ bool ConstraintSolver::block_(BlockedConstraintId target, NotNull<const Constrai
 {
     // If a set is not present for the target, construct a new DenseHashSet for it,
     // else grab the address of the existing set.
-    auto [iter, inserted] = blocked.try_emplace(target, nullptr);
-    auto& [key, blockVec] = *iter;
+    NotNull<DenseHashSet<const Constraint*>> blockVec{&blocked.try_emplace(target, nullptr).first->second};
 
-    if (blockVec.find(constraint))
+    if (blockVec->find(constraint))
         return false;
 
-    blockVec.insert(constraint);
+    blockVec->insert(constraint);
 
-    size_t& count = blockedConstraints[constraint];
+    auto& count = blockedConstraints[constraint];
     count += 1;
 
     return true;
@@ -2433,8 +2432,9 @@ TypeId ConstraintSolver::resolveModule(const ModuleInfo& info, const Location& l
     ModulePtr module = moduleResolver->getModule(info.name);
     if (!module)
     {
-        if (!moduleResolver->moduleExists(info.name) && !info.optional)
+        if (!moduleResolver->moduleExists(info.name) && !info.optional) {
             reportError(UnknownRequire{moduleResolver->getHumanReadableModuleName(info.name)}, location);
+        }
 
         return errorRecoveryType();
     }

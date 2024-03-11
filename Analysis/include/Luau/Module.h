@@ -18,6 +18,7 @@ namespace Luau
 {
 
 struct Module;
+struct SourceModule;
 
 using ScopePtr = std::shared_ptr<struct Scope>;
 using ModulePtr = std::shared_ptr<Module>;
@@ -54,6 +55,7 @@ struct SourceModule
 
 bool isWithinComment(const SourceModule& sourceModule, Position pos);
 bool isWithinComment(const ParseResult& result, Position pos);
+std::optional<Luau::HotComment> getHotComment(std::vector<Luau::HotComment> hotcomments, Position pos);
 
 struct RequireCycle
 {

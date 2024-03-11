@@ -17,12 +17,20 @@
 #include <utility>
 #include <fstream>
 
+#ifdef _WIN32
+#include <io.h>
+#include <fcntl.h>
+#include <iostream>
+#endif
+
 #ifdef CALLGRIND
 #include <valgrind/callgrind.h>
 #endif
 
 LUAU_FASTFLAG(DebugLuauTimeTracing)
 LUAU_FASTFLAG(DebugLuauLogSolverToJsonFile)
+
+struct SourceModule;
 
 enum class ReportFormat
 {
@@ -160,7 +168,7 @@ struct CliFileResolver : Luau::FileResolver
         return Luau::SourceCode{*source, sourceType};
     }
 
-    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node) override
+    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, Luau::SourceModule *src = nullptr) override
     {
         if (Luau::AstExprConstantString* expr = node->as<Luau::AstExprConstantString>())
         {
