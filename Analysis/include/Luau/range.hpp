@@ -10,7 +10,13 @@ namespace util { namespace lang {
 namespace detail {
 
 template <typename T>
-struct range_iter_base : std::iterator<std::input_iterator_tag, T> {
+struct range_iter_base {
+    using iterator_category = std::input_iterator_tag;
+    using value_type = T;
+    using difference_type = std::ptrdiff_t;
+    using pointer = T*;
+    using reference = T&;
+
     range_iter_base(T current) : current(current) { }
 
     T operator *() const { return current; }
@@ -40,7 +46,7 @@ protected:
     T current;
 };
 
-} // namespace detail
+}
 
 template <typename T>
 struct step_range_proxy {
@@ -81,7 +87,7 @@ struct step_range_proxy {
 
     iterator end() const { return end_; }
 
-    std::size_t size() const { 
+    std::size_t size() const {
         if (*end_ >= *begin_) {
             // Increasing and empty range
             if (begin_.step_ < T{0}) return 0;
